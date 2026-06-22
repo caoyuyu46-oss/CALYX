@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying paper."
+title: "CALYX: Calyx-Aware Lighting-Yielded eXplainable Framework"
+version: 1.0.0
+date-released: 2026-05-01
+authors:
+  - family-names: "Authors"
+    given-names: "CALYX"
+license: Apache-2.0
+repository-code: "https://github.com/caoyuyu46-oss/CALYX"
+preferred-citation:
+  type: article
+  title: "Reflectance-aware and shape-prior-guided framework for production-line surface defect detection and interpretable grading of Korla pear"
+  authors:
+    - family-names: "Authors"
+      given-names: "CALYX"
+  journal: "Computers and Electronics in Agriculture"
+  year: 2026
