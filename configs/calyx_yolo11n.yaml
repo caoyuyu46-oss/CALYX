@@ -1,0 +1,84 @@
+# Ultralytics YOLO11n CALYX integration config
+# ============================================
+# Implements paper Sections 3.1.1 and 4.2:
+#  - nc = 4 (pear / peduncle / calyx / defect)
+#  - PSPKBlock embedded at backbone P2 (stride 4) and P4 (stride 16)
+#  - PGI injected at the three neck PAN-FPN scales (P3/P4/P5)
+#  - the DAR head is managed by the training script and stripped at inference
+#    via ONNX subgraph pruning
+#
+# Class set (Section 3.1.1, pear / peduncle / calyx / defect):
+#   0: pear        pear body
+#   1: peduncle    stem
+#   2: calyx       calyx region (the calyx-end probe does a concave/convex
+#                  subclass split here, see Section 3.5.3; this is an auxiliary
+#                  task and does not add a detection class)
+#   3: defect      surface defect (a single unified defect class; concave/convex
+#                  geometry attributes are only PSPK intermediate channels, not
+#                  detection labels, see Section 3.1.1)
+
+nc: 4
+
+# Scaling factors: same as ultralytics YOLO11n.
+scales:
+  n: [0.50, 0.25, 1024]   # depth, width, max_channels
+
+# Backbone definition.
+# Key change: insert a PSPKBlock at the end of stage 2 (P2) and stage 4 (P4),
+# adding 4 channels (the polarity maps P_1..P_4) that are concatenated and
+# passed to the next stage.
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv,    [64, 3, 2]]                   # 0  P1 / 2
+  - [-1, 1, Conv,    [128, 3, 2]]                  # 1  P2 / 4
+  - [-1, 2, C3k2,    [256, False, 0.25]]           # 2
+  - [-1, 1, PSPKBlock, [256]]                      # 3  PSPK at P2 (Section 3.3)
+  - [-1, 1, Conv,    [256, 3, 2]]                  # 4  P3 / 8
+  - [-1, 2, C3k2,    [512, False, 0.25]]           # 5
+  - [-1, 1, Conv,    [512, 3, 2]]                  # 6  P4 / 16
+  - [-1, 2, C3k2,    [512, True]]                  # 7
+  - [-1, 1, PSPKBlock, [512]]                      # 8  PSPK at P4 (Section 3.3)
+  - [-1, 1, Conv,    [1024, 3, 2]]                 # 9  P5 / 32
+  - [-1, 2, C3k2,    [1024, True]]                 # 10
+  - [-1, 1, SPPF,    [1024, 5]]                    # 11
+  - [-1, 2, C2PSA,   [1024]]                       # 12
+
+# Neck PAN-FPN + PGI injection.
+# Key change: apply PGI at the three PAN-FPN output scales (P3/P4/P5); the
+# polarity map comes from backbone[3] (the P2-stage PSPK output).
+head:
+  # top-down P5 -> P4
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 13
+  - [[-1, 7], 1, Concat, [1]]                      # 14 (P5_up + P4_pre)
+  - [-1, 2, C3k2, [512, False]]                    # 15  P4_td
+
+  # top-down P4 -> P3
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]     # 16
+  - [[-1, 5], 1, Concat, [1]]                      # 17 (P4_up + P3_pre)
+  - [-1, 2, C3k2, [256, False]]                    # 18  P3_td
+
+  # bottom-up P3 -> P4
+  - [-1, 1, Conv, [256, 3, 2]]                     # 19
+  - [[-1, 15], 1, Concat, [1]]                     # 20
+  - [-1, 2, C3k2, [512, False]]                    # 21  P4_bu
+
+  # bottom-up P4 -> P5
+  - [-1, 1, Conv, [512, 3, 2]]                     # 22
+  - [[-1, 12], 1, Concat, [1]]                     # 23
+  - [-1, 2, C3k2, [1024, True]]                    # 24  P5_bu
+
+  # ---- PGI three-scale injection ----
+  # PGI takes two inputs: the target neck features and the polarity map (from
+  # backbone[3]). Since the ultralytics YAML parser supports only a single
+  # ``from`` index list, a custom multi-input PGI wrapper layer is used
+  # (injected into the parser by register.py). The three PGI instances bind to
+  # (P3, P4, P5).
+  - [[18, 3], 1, PGI, [(256, 512, 1024)]]          # 25  PGI, polarity from backbone[3]
+
+  # PGI outputs a list of three-scale features that must be split to the heads
+  # via an Index layer. ultralytics does not natively support list outputs, so
+  # for real deployment follow the explicit CalyxYOLOSkeleton in calyx_yolo.py;
+  # this YAML is a conceptual reference.
+
+  # Detection head (a standard YOLO11 decoupled head).
+  - [[18, 21, 24], 1, Detect, [nc]]                # 26
