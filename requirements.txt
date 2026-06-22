@@ -1,0 +1,29 @@
+# ============================================================
+# CALYX runtime requirements
+# ============================================================
+# Strict runtime dependencies. matplotlib and ultralytics, needed by the
+# visualization and training scripts, are listed under "optional" below and
+# installed as needed.
+# ============================================================
+
+# ---- core runtime (required) ----
+torch>=2.0
+numpy>=1.21
+pyyaml>=6.0
+
+# ---- testing (to run tests/) ----
+pytest>=7.0
+
+# ---- visualization (optional, for examples/visualize_*.py) ----
+matplotlib>=3.5
+
+# ---- ultralytics integration (optional, for register_calyx_modules) ----
+# Needed only when training with the Ultralytics YOLO11 backbone. The skeleton
+# reference implementation (calyx.models.calyx_yolo.CalyxYOLOSkeleton) does not
+# depend on ultralytics.
+ultralytics>=8.3
+
+# ---- development (optional, formatting and static analysis) ----
+# black>=23.0
+# ruff>=0.1
+# mypy>=1.0
